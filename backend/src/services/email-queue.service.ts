@@ -127,16 +127,6 @@ export class EmailQueueService {
       return { success: false, code: 'SPAM_CONTENT_REJECTED', error: contentCheck.error };
     }
 
-    const rateCheck = this.antiSpam.checkWalletRateLimit(input.senderWallet);
-    if (!rateCheck.allowed) {
-      return {
-        success: false,
-        code: 'EMAIL_RATE_LIMIT_EXCEEDED',
-        error: `Outbound email rate limit exceeded for wallet (${rateCheck.currentCount}/${rateCheck.maxAllowed} per hour)`,
-        retryAfterSeconds: rateCheck.retryAfterSeconds,
-      };
-    }
-
     // A caller-supplied key is scoped to this sender. Do this before rate/quota consumption
     // so a duplicate retry returns the original delivery without consuming another slot.
     if (input.dedupeKey !== undefined) {
@@ -145,8 +135,24 @@ export class EmailQueueService {
         return { success: false, code: 'NOTIFICATION_DEDUPE_KEY_INVALID', error: 'dedupeKey must be 8-255 URL-safe characters' };
       }
       const existing = await this.storage.getDeliveryByDedupeKey(input.senderWallet + ':' + key);
-      if (existing) return { success: true, delivery: existing };
+      if (existing) {
+        const samePayload = JSON.stringify(existing.payload ?? {}) === JSON.stringify(input.payload ?? {});
+        if (existing.invoiceId !== input.invoiceId || existing.recipientEmail.toLowerCase() !== val.normalized?.toLowerCase() || existing.emailType !== input.emailType || existing.subject !== input.subject || !samePayload) {
+          return { success: false, code: 'NOTIFICATION_DEDUPE_KEY_CONFLICT', error: 'dedupeKey was already used for a different notification' };
+        }
+        return { success: true, delivery: existing };
+      }
       input = { ...input, dedupeKey: input.senderWallet + ':' + key };
+    }
+
+    const rateCheck = this.antiSpam.checkWalletRateLimit(input.senderWallet);
+    if (!rateCheck.allowed) {
+      return {
+        success: false,
+        code: 'EMAIL_RATE_LIMIT_EXCEEDED',
+        error: `Outbound email rate limit exceeded for wallet (${rateCheck.currentCount}/${rateCheck.maxAllowed} per hour)`,
+        retryAfterSeconds: rateCheck.retryAfterSeconds,
+      };
     }
 
     // Per-invoice email cap (Issue #31): Enforce max outbound emails per invoice to prevent spam relays
