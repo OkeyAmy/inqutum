@@ -86,7 +86,9 @@ export type CapabilityErrorCode =
   | 'CAPABILITY_SCOPE_MISMATCH'
   | 'CAPABILITY_IN_USE'
   | 'CAPABILITY_ALREADY_USED'
-  | 'CAPABILITY_LEDGER_FULL';
+  | 'CAPABILITY_LEDGER_FULL'
+  | 'CAPABILITY_REVOKED'
+  | 'CAPABILITY_SUBJECT_REVOKED';
 
 const HTTP_STATUS: Record<CapabilityErrorCode, number> = {
   CAPABILITY_REQUEST_INVALID: 400,
@@ -99,6 +101,8 @@ const HTTP_STATUS: Record<CapabilityErrorCode, number> = {
   CAPABILITY_IN_USE: 409,
   CAPABILITY_ALREADY_USED: 409,
   CAPABILITY_LEDGER_FULL: 503,
+  CAPABILITY_REVOKED: 401,
+  CAPABILITY_SUBJECT_REVOKED: 401,
 };
 
 export class CapabilityError extends Error {
@@ -132,6 +136,10 @@ type LedgerEntry = { state: 'reserved' | 'used'; exp: number };
 
 export class CapabilityTokenService {
   private readonly ledger = new Map<string, LedgerEntry>();
+  /** Revoked token ids are retained only until their signed expiry. */
+  private readonly revokedIds = new Map<string, number>();
+  /** Subject cutoffs invalidate all capabilities issued at or before the cutoff. */
+  private readonly revokedSubjects = new Map<string, number>();
   private readonly now: () => Date;
   private readonly capacity: number;
 
