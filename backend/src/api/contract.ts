@@ -216,6 +216,16 @@ export const API_CONTRACT: ContractEndpoint[] = [
     responseKind: 'raw',
     responses: [200, 503],
   },
+  {
+    method: 'GET',
+    path: '/api/health/dependencies',
+    group: 'public',
+    surfaces: BOTH,
+    auth: 'none',
+    summary: 'Dependency-aware health status. Returns per-dependency state (healthy/degraded/down) and overall status. 503 when overall is down.',
+    responseKind: 'raw',
+    responses: [200, 503],
+  },
 
   // ── Invoices ────────────────────────────────────────────────────────────
   {

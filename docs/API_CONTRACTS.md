@@ -55,6 +55,7 @@ the drift test pins that list, so it cannot grow by accident:
 | --- | --- | --- |
 | `GET /` | JSON banner | humans / uptime scripts |
 | `GET /api/health` | JSON probe payload | Kubernetes liveness |
+| `GET /api/health/dependencies` | JSON probe payload | Kubernetes liveness / monitoring |
 | `GET /api/ready` | JSON probe payload | Kubernetes readiness |
 | `GET /api/metrics` | Prometheus text | scraper |
 | `GET /api/audit/export` | streamed document | browser download |
@@ -135,6 +136,7 @@ cursor. These semantics are pinned by
 | --- | --- | --- | --- | --- |
 | `GET` | `/` | none | 200 | Server banner: name, version and storage mode. |
 | `GET` | `/api/health` | none | 200 | Liveness plus the storage mode the server is running in. |
+| `GET` | `/api/health/dependencies` | none | 200, 503 | Dependency-aware health status. Returns per-dependency state (healthy/degraded/down) and overall status. 503 when overall is down. |
 | `GET` | `/api/ready` | none | 200, 503 | Readiness probe. 503 when a dependency is unavailable. |
 | `POST` | `/api/invoices` | none | 201, 400 | Create an invoice. 201 returns the stored invoice. |
 | `GET` | `/api/invoices` | none | 200, 400, 500 | List invoices for a seller. Keyset pagination via `cursor`; `limit` clamped to 1-200. |

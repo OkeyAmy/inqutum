@@ -13,7 +13,7 @@ import { createNotificationRouter } from './routes/notification.routes';
 import { createObservabilityRouter } from './routes/observability.routes';
 import memoryInvoiceStorage from './storage/memory-invoice-storage';
 import { configuredFrontendOrigins, corsOptions } from './config/runtime';
-import { healthHandler, readinessHandler } from './health';
+import { healthHandler, readinessHandler, dependencyHealthHandler } from './health';
 import { securityHeaders } from './security/content-safety';
 import { correlationMiddleware } from './observability/telemetry';
 import { buildUserSafeErrorResponse, classifyError } from './errors/error-taxonomy';
@@ -64,6 +64,7 @@ app.get('/', (req: Request, res: Response) => {
 
 // Health check
 app.get('/api/health', healthHandler(memoryInvoiceStorage.mode));
+app.get('/api/health/dependencies', dependencyHealthHandler());
 app.get('/api/ready', readinessHandler(memoryInvoiceStorage.mode));
 
 // Invoice, Audit & Observability routes

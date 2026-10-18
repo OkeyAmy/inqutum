@@ -15,12 +15,13 @@ import { PostgresJobStore } from '../jobs/postgres-job-store';
 import { pool } from '../config/database';
 import { EmailDeliveryService } from '../notifications/email-delivery';
 import { PostgresCheckpointStore } from '../recovery/side-effect-checkpoint';
-import { healthHandler, readinessHandler } from '../health';
+import { healthHandler, readinessHandler, dependencyHealthHandler } from '../health';
 
 const router: Router = Router();
 
 // Health check
 router.get('/health', healthHandler(postgresInvoiceStorage.mode));
+router.get('/health/dependencies', dependencyHealthHandler());
 router.get('/ready', readinessHandler(postgresInvoiceStorage.mode));
 
 // Invoice routes — same handlers the MVP server uses, backed by PostgreSQL
