@@ -188,6 +188,7 @@ CREATE TABLE IF NOT EXISTS email_deliveries (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   invoice_id UUID REFERENCES invoices(id) ON DELETE CASCADE,
   recipient_email VARCHAR(255) NOT NULL,
+  dedupe_key VARCHAR(320),
   sender_wallet VARCHAR(56) NOT NULL,
   email_type VARCHAR(50) NOT NULL,
   subject VARCHAR(255) NOT NULL,
@@ -204,6 +205,7 @@ CREATE TABLE IF NOT EXISTS email_deliveries (
   sent_at TIMESTAMPTZ
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_email_deliveries_dedupe_key ON email_deliveries(dedupe_key) WHERE dedupe_key IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_email_deliveries_invoice ON email_deliveries(invoice_id);
 CREATE INDEX IF NOT EXISTS idx_email_deliveries_sender ON email_deliveries(sender_wallet);
 CREATE INDEX IF NOT EXISTS idx_email_deliveries_pending ON email_deliveries(status, next_attempt_at) WHERE status = 'PENDING';
