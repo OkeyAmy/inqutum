@@ -42,6 +42,13 @@ export class MemoryEmailDeliveryStorage implements EmailDeliveryStorage {
     return { ...delivery };
   }
 
+  public async createDeliveryWithDedupe(input: EnqueueEmailInput, initialStatus: EmailDeliveryStatus = 'PENDING'): Promise<{ delivery: EmailDelivery; created: boolean }> {
+    if (!input.dedupeKey) return { delivery: await this.createDelivery(input, initialStatus), created: true };
+    const existing = await this.getDeliveryByDedupeKey(input.dedupeKey);
+    if (existing) return { delivery: existing, created: false };
+    return { delivery: await this.createDelivery(input, initialStatus), created: true };
+  }
+
   public async getDeliveryByDedupeKey(key: string): Promise<EmailDelivery | null> {
     const found = Array.from(this.deliveries.values()).find((d) => d.dedupeKey === key);
     return found ? { ...found } : null;
