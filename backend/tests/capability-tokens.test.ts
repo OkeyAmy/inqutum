@@ -210,3 +210,31 @@ describe('capability tokens — single use and retries (#285)', () => {
     assert.equal(await service.use(second, SCOPE, () => 'after expiry'), 'after expiry');
   });
 });
+
+describe('capability token revocation (#297)', () => {
+  it('revokes one token and refuses subsequent use without running the action', async () => {
+    const { service, issue } = setup();
+    const token = issue();
+    const claims = service.verify(token, SCOPE);
+    assert.equal(service.revokeCapability(claims), true);
+    assert.equal(service.revokeCapability(claims), false);
+    let ran = false;
+    await rejectsAsync(service.use(token, SCOPE, () => { ran = true; }), 'CAPABILITY_REVOKED', 401);
+    assert.equal(ran, false);
+  });
+
+  it('revokes outstanding tokens for a subject but allows a newly issued token', async () => {
+    const { service, issue, advance } = setup();
+    const stale = issue();
+    assert.equal(service.revokeSubject('maintainer-alice'), true);
+    await rejectsAsync(service.use(stale, SCOPE, () => 'must not run'), 'CAPABILITY_SUBJECT_REVOKED', 401);
+    advance(1);
+    const fresh = issue();
+    assert.equal(await service.use(fresh, SCOPE, () => 'fresh'), 'fresh');
+  });
+
+  it('rejects invalid subject revocation requests', () => {
+    const { service } = setup();
+    rejects(() => service.revokeSubject('  '), 'CAPABILITY_REQUEST_INVALID', 400);
+  });
+});
