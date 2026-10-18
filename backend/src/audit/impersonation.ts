@@ -66,7 +66,7 @@ export interface ImpersonationSession {
   startedAt: string;
   expiresAt: string;
   endedAt?: string;
-  endReason?: 'manual' | 'expired';
+  endReason?: 'manual' | 'expired' | 'security_event';
 }
 
 export interface AuthorizationDecision {
@@ -247,7 +247,7 @@ export class ImpersonationService {
     const session = this.getActiveSession(input.maintainerId);
     if (!session) {
       const ended = this.findClosedSession(input.maintainerId);
-      const code = ended?.endReason === 'expired' ? 'SESSION_EXPIRED' : ended ? 'SESSION_ENDED' : 'NO_ACTIVE_SESSION';
+      const code = ended?.endReason === 'expired' ? 'SESSION_EXPIRED' : ended?.endReason === 'security_event' ? 'SESSION_REVOKED' : ended ? 'SESSION_ENDED' : 'NO_ACTIVE_SESSION';
       return this.deny(input, code, 'No active impersonation session', ended?.id);
     }
 
