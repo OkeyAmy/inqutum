@@ -10,6 +10,13 @@ import { memoryEmailDeliveryStorage } from '../storage/memory-email-delivery-sto
 import { EmailAntiSpamService, emailAntiSpamService } from './email-anti-spam.service';
 import { quotaManager } from '../domain/quota-management';
 
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return '[' + value.map(canonicalJson).join(',') + ']';
+  const object = value as Record<string, unknown>;
+  return '{' + Object.keys(object).sort().map((key) => JSON.stringify(key) + ':' + canonicalJson(object[key])).join(',') + '}';
+}
+
 export interface EmailRetryConfig {
   initialBackoffMs: number;
   backoffMultiplier: number;
@@ -136,7 +143,7 @@ export class EmailQueueService {
       }
       const existing = await this.storage.getDeliveryByDedupeKey(input.senderWallet + ':' + key);
       if (existing) {
-        const samePayload = JSON.stringify(existing.payload ?? {}) === JSON.stringify(input.payload ?? {});
+        const samePayload = canonicalJson(existing.payload ?? {}) === canonicalJson(input.payload ?? {});
         if (existing.invoiceId !== input.invoiceId || existing.recipientEmail.toLowerCase() !== val.normalized?.toLowerCase() || existing.emailType !== input.emailType || existing.subject !== input.subject || !samePayload) {
           return { success: false, code: 'NOTIFICATION_DEDUPE_KEY_CONFLICT', error: 'dedupeKey was already used for a different notification' };
         }
@@ -165,6 +172,19 @@ export class EmailQueueService {
       };
     }
 
+    // Recheck before quota reservation to avoid charging duplicate requests that
+    // raced the first lookup. The storage-level unique key remains the final guard.
+    if (input.dedupeKey) {
+      const existing = await this.storage.getDeliveryByDedupeKey(input.dedupeKey);
+      if (existing) {
+        const samePayload = canonicalJson(existing.payload ?? {}) === canonicalJson(input.payload ?? {});
+        if (existing.invoiceId !== input.invoiceId || existing.recipientEmail.toLowerCase() !== (val.normalized || input.recipientEmail).toLowerCase() || existing.emailType !== input.emailType || existing.subject !== input.subject || !samePayload) {
+          return { success: false, code: 'NOTIFICATION_DEDUPE_KEY_CONFLICT', error: 'dedupeKey was already used for a different notification' };
+        }
+        return { success: true, delivery: existing };
+      }
+    }
+
     // Reserve only after validation and the existing per-invoice cap: this is
     // the point at which the request can actually consume queue capacity.
     const quota = quotaManager.reserve('email_enqueue', {
@@ -184,8 +204,21 @@ export class EmailQueueService {
     const initialStatus: EmailDeliveryStatus = isBreakerTripped ? 'PAUSED' : 'PENDING';
 
     let delivery: EmailDelivery;
+    let deliveryWasCreated = true;
     try {
-      delivery = await this.storage.createDelivery(
+      if (input.dedupeKey && this.storage.createDeliveryWithDedupe) {
+        const outcome = await this.storage.createDeliveryWithDedupe(
+          {
+            ...input,
+            recipientEmail: val.normalized || input.recipientEmail,
+            maxAttempts: input.maxAttempts || this.retryConfig.defaultMaxAttempts,
+          },
+          initialStatus
+        );
+        delivery = outcome.delivery;
+        deliveryWasCreated = outcome.created;
+      } else {
+        delivery = await this.storage.createDelivery(
       {
         ...input,
         recipientEmail: val.normalized || input.recipientEmail,
@@ -193,8 +226,9 @@ export class EmailQueueService {
       },
       initialStatus
       );
+      }
       if (input.dedupeKey) {
-        const samePayload = JSON.stringify(delivery.payload ?? {}) === JSON.stringify(input.payload ?? {});
+        const samePayload = canonicalJson(delivery.payload ?? {}) === canonicalJson(input.payload ?? {});
         if (delivery.invoiceId !== input.invoiceId || delivery.recipientEmail.toLowerCase() !== (val.normalized || input.recipientEmail).toLowerCase() || delivery.emailType !== input.emailType || delivery.subject !== input.subject || !samePayload) {
           return { success: false, code: 'NOTIFICATION_DEDUPE_KEY_CONFLICT', error: 'dedupeKey was already used for a different notification' };
         }
@@ -215,7 +249,9 @@ export class EmailQueueService {
       throw error;
     }
 
-    this.antiSpam.recordWalletSend(input.senderWallet);
+    // createDelivery may return an existing row after a concurrent insert. Only
+    // count a wallet send when the row was created by this request (tracked below).
+    if (!input.dedupeKey || deliveryWasCreated) this.antiSpam.recordWalletSend(input.senderWallet);
 
     return { success: true, delivery };
   }
