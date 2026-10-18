@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 import { deploymentReadiness, simulationAllowed } from './config/runtime';
 import { STELLAR_NETWORK } from './config/stellar';
 import { featureFlagSnapshot } from './config/feature-flags';
-import { runDependencyChecks, type DegradationReport, type DependencyState } from './ops/dependency-degradation';
+import { runDependencyChecks, type DegradationReport } from './ops/dependency-degradation';
 import { buildDependencyProbes } from './health-probes';
 
 export function healthPayload(storage: string) {
