@@ -253,6 +253,7 @@ export class CapabilityTokenService {
       throw new CapabilityError('CAPABILITY_REQUEST_INVALID', `subject is required (max ${MAX_FIELD_LENGTH} characters)`);
     }
     const cutoff = this.now().getTime();
+    this.pruneRevocations(cutoff);
     const previous = this.revokedSubjects.get(normalized);
     if (previous !== undefined && previous.cutoff >= cutoff) return false;
     const maxTtl = Math.max(...Object.values(SENSITIVE_ACTIONS).map((spec) => spec.maxTtlMs));
