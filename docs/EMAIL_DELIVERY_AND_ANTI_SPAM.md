@@ -57,6 +57,14 @@ CREATE TABLE IF NOT EXISTS email_deliveries (
 
 ---
 
+## 2a. Duplicate suppression (Issue #294)
+
+Callers may pass an optional `dedupeKey` to `EmailQueueService.enqueue`. It must be a stable event/request ID (8-255 URL-safe characters); the service scopes it to the sender wallet. Repeating a key returns the original delivery and does not queue another message or consume another rate-limit/quota slot. Invalid keys fail with `NOTIFICATION_DEDUPE_KEY_INVALID`. Requests without a key preserve legacy behavior.
+
+Postgres enforces uniqueness with a partial unique index; apply the normal `npm run db:migrate` schema deployment before enabling keys. The memory store offers the same contract within one process only. A duplicate racing the first insert resolves to the winner. Keep keys stable across retries and do not reuse them for distinct notification events. Existing rows have `NULL` keys and are unaffected. Rollback: deploy code that no longer supplies keys first; retain the nullable column/index until all new code is rolled back. Do not drop the index while key-sending instances are running.
+
+This suppresses duplicate queue creation, not provider-level exactly-once delivery: if an SMTP provider accepts a message and the process crashes before marking it `SENT`, a retry can still send again. Provider-supported idempotency or delivery reconciliation is needed to close that external side-effect window. Inbound webhook endpoints are not currently part of the public API; webhook consumers should authenticate signatures before recording an event and use a durable event-ID ledger before processing.
+
 ## 3. Anti-Spam Relay Protections & Circuit Breaker (Issue #38)
 
 ### Per-Wallet Outbound Rate Limiting
