@@ -127,11 +127,14 @@ describe('Phase E: Email Queue, Retry Policy, and Anti-Spam Protection', () => {
         senderWallet: WALLET_A, emailType: 'INVOICE_SENT', subject: 'One notification',
       };
       const first = await queue.enqueue(input);
-      const duplicate = await queue.enqueue({ ...input, recipientEmail: 'changed@example.com' });
+      const duplicate = await queue.enqueue({ ...input });
       assert.equal(first.success, true);
       assert.equal(duplicate.success, true);
       assert.equal(duplicate.delivery?.id, first.delivery?.id);
       assert.equal((await storage.listDeliveries({ invoiceId: INVOICE_ID })).length, 1);
+      const conflict = await queue.enqueue({ ...input, subject: 'Different notification' });
+      assert.equal(conflict.success, false);
+      assert.equal(conflict.code, 'NOTIFICATION_DEDUPE_KEY_CONFLICT');
       const invalid = await queue.enqueue({ ...input, dedupeKey: 'bad' });
       assert.equal(invalid.success, false);
       assert.equal(invalid.code, 'NOTIFICATION_DEDUPE_KEY_INVALID');
