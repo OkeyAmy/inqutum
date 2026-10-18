@@ -72,6 +72,12 @@ export class PostgresEmailDeliveryStorage implements EmailDeliveryStorage {
     throw new Error('Email delivery insert returned no row and no matching dedupe key');
   }
 
+  public async createDeliveryWithDedupe(input: EnqueueEmailInput, initialStatus: EmailDeliveryStatus = 'PENDING'): Promise<{ delivery: EmailDelivery; created: boolean }> {
+    const before = input.dedupeKey ? await this.getDeliveryByDedupeKey(input.dedupeKey) : null;
+    const delivery = await this.createDelivery(input, initialStatus);
+    return { delivery, created: !before && delivery.createdAt.getTime() >= Date.now() - 5000 && delivery.dedupeKey === input.dedupeKey && delivery.status === initialStatus && delivery.attempts === 0 };
+  }
+
   public async getDeliveryByDedupeKey(key: string): Promise<EmailDelivery | null> {
     const res = await this.db.query('SELECT * FROM email_deliveries WHERE dedupe_key = $1 LIMIT 1;', [key]);
     return res.rows[0] ? mapRowToDelivery(res.rows[0]) : null;
