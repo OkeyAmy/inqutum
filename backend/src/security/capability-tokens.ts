@@ -225,6 +225,14 @@ export class CapabilityTokenService {
     if (claims.action !== scope.action || claims.target !== scope.target) {
       throw new CapabilityError('CAPABILITY_SCOPE_MISMATCH', `Capability is for ${claims.action} on "${claims.target}", not ${scope.action} on "${scope.target}"`);
     }
+    this.pruneRevocations(now);
+    if (this.revokedIds.has(claims.id)) {
+      throw new CapabilityError('CAPABILITY_REVOKED', 'Capability was revoked after a security event; issue a new one');
+    }
+    const subjectRevocation = this.revokedSubjects.get(claims.subject);
+    if (subjectRevocation !== undefined && claims.iat <= subjectRevocation.cutoff) {
+      throw new CapabilityError('CAPABILITY_SUBJECT_REVOKED', 'Capabilities for this subject were revoked after a security event; issue a new one');
+    }
     return claims;
   }
 
