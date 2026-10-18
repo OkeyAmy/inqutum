@@ -21,15 +21,16 @@ export interface WebhookInput {
  * The store must be shared/durable in production; the memory store is for tests/MVP.
  */
 export async function processWebhook(store: IdempotencyStore, input: WebhookInput): Promise<WebhookResult> {
-  if (!input.provider?.trim() || !input.eventId?.trim() || input.eventId.length > 255) {
+  const provider = input.provider?.trim();
+  const key = input.eventId?.trim();
+  if (!provider || !key || key.length > 255) {
     return { accepted: false, status: 400, code: 'WEBHOOK_EVENT_ID_INVALID' };
   }
   let authorized = false;
   try { authorized = await input.verifySignature(); } catch { authorized = false; }
   if (!authorized) return { accepted: false, status: 401, code: 'WEBHOOK_SIGNATURE_INVALID' };
 
-  const key = input.eventId.trim();
-  const scope = 'webhook:' + input.provider.trim().toLowerCase();
+  const scope = 'webhook:' + provider.toLowerCase();
   const body = Buffer.isBuffer(input.rawBody) ? input.rawBody : Buffer.from(input.rawBody);
   const fingerprint = createHash('sha256').update(body).digest('hex');
   const now = (input.now ?? (() => new Date()))();
