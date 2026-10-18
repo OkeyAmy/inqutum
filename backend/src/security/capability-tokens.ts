@@ -139,7 +139,7 @@ export class CapabilityTokenService {
   /** Revoked token ids are retained only until their signed expiry. */
   private readonly revokedIds = new Map<string, number>();
   /** Subject cutoffs invalidate all capabilities issued at or before the cutoff. */
-  private readonly revokedSubjects = new Map<string, number>();
+  private readonly revokedSubjects = new Map<string, { cutoff: number; expiresAt: number }>();
   private readonly now: () => Date;
   private readonly capacity: number;
 
