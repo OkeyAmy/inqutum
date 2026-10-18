@@ -79,7 +79,7 @@ If the response to a successful call is lost, the retry returns 409
 `CAPABILITY_ALREADY_USED`. Confirm the outcome with `GET /api/ops/config`, or
 search `GET /api/audit/events?action=CONFIG_CHANGED` for your `capabilityId`.
 
-## Operational edge cases
+## Security-event revocation (#297)\n\n`CapabilityTokenService.revokeCapability(claims)` revokes one capability after its signed claims have been authenticated; `revokeSubject(subject)` invalidates capabilities issued to that subject at or before the revocation cutoff. Verification returns `401 CAPABILITY_REVOKED` or `401 CAPABILITY_SUBJECT_REVOKED`. Both are fail-closed. A subject can receive newly issued capabilities after a fresh authorization decision. Session operators can call `ImpersonationService.revokeSessionsForMaintainer(maintainerId, reason)` or the incident-response `revokeAllSessions(reason)`; each active session is ended and audited as `IMPERSONATION_REVOKED`. Repeating a revocation is safe and returns no newly revoked sessions. Missing subject/maintainer/reason inputs are rejected.\n\n**Important deployment boundary:** these revocation records and session objects currently live in process memory. They protect subsequent checks in the same process only. They do not survive restart and are not shared between instances. For a suspected compromise spanning instances or restarts, rotate `CAPABILITY_TOKEN_SECRET`, restart all instances, and invalidate active sessions at the deployment/control-plane level. Do not claim durable/global revocation until a shared durable revocation store is integrated. Rollback is code rollback only; do not restore old processes with potentially valid in-memory credentials after an incident.\n\n## Operational edge cases
 
 - **Revoke all outstanding tokens:** rotate `CAPABILITY_TOKEN_SECRET` and
   restart. Every token signed with the old key fails with 401 `CAPABILITY_INVALID`.
@@ -107,5 +107,5 @@ only when the ledger is full. Space is O(live used or reserved ids).
 
 ```bash
 cd backend
-node --import tsx --test tests/capability-tokens.test.ts tests/admin-config-audit.test.ts
+node --import tsx --test tests/capability-tokens.test.ts tests/admin-config-audit.test.ts tests/impersonation.test.ts
 ```
