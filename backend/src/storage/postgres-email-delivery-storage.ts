@@ -12,6 +12,7 @@ function mapRowToDelivery(row: any): EmailDelivery {
   return {
     id: row.id,
     invoiceId: row.invoice_id,
+    dedupeKey: row.dedupe_key || undefined,
     recipientEmail: row.recipient_email,
     senderWallet: row.sender_wallet,
     emailType: row.email_type,
@@ -44,13 +45,15 @@ export class PostgresEmailDeliveryStorage implements EmailDeliveryStorage {
   ): Promise<EmailDelivery> {
     const text = `
       INSERT INTO email_deliveries (
-        invoice_id, recipient_email, sender_wallet, email_type, subject,
+        invoice_id, dedupe_key, recipient_email, sender_wallet, email_type, subject,
         status, attempts, max_attempts, next_attempt_at, is_retryable, payload
-      ) VALUES ($1, $2, $3, $4, $5, $6, 0, $7, NOW(), TRUE, $8)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8, NOW(), TRUE, $9)
+      ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING
       RETURNING *;
     `;
     const params = [
       input.invoiceId,
+      input.dedupeKey ?? null,
       input.recipientEmail,
       input.senderWallet,
       input.emailType,
@@ -61,7 +64,17 @@ export class PostgresEmailDeliveryStorage implements EmailDeliveryStorage {
     ];
 
     const res = await this.db.query(text, params);
-    return mapRowToDelivery(res.rows[0]);
+    if (res.rows[0]) return mapRowToDelivery(res.rows[0]);
+    if (input.dedupeKey) {
+      const existing = await this.getDeliveryByDedupeKey(input.dedupeKey);
+      if (existing) return existing;
+    }
+    throw new Error('Email delivery insert returned no row and no matching dedupe key');
+  }
+
+  public async getDeliveryByDedupeKey(key: string): Promise<EmailDelivery | null> {
+    const res = await this.db.query('SELECT * FROM email_deliveries WHERE dedupe_key = $1 LIMIT 1;', [key]);
+    return res.rows[0] ? mapRowToDelivery(res.rows[0]) : null;
   }
 
   public async getDeliveryById(id: string): Promise<EmailDelivery | null> {
