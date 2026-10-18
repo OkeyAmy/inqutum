@@ -15,6 +15,7 @@ export type EmailType = 'INVOICE_SENT' | 'PAYMENT_PROOF' | 'PAYMENT_REMINDER';
 export interface EmailDelivery {
   id: string;
   invoiceId: string;
+  dedupeKey?: string;
   recipientEmail: string;
   senderWallet: string;
   emailType: EmailType;
@@ -34,6 +35,8 @@ export interface EmailDelivery {
 
 export interface EnqueueEmailInput {
   invoiceId: string;
+  /** Stable caller-supplied event identity; reusing it suppresses duplicate queueing. */
+  dedupeKey?: string;
   recipientEmail: string;
   senderWallet: string;
   emailType: EmailType;
