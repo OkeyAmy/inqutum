@@ -137,6 +137,18 @@ export class EmailQueueService {
       };
     }
 
+    // A caller-supplied key is scoped to this sender. Do this before rate/quota consumption
+    // so a duplicate retry returns the original delivery without consuming another slot.
+    if (input.dedupeKey !== undefined) {
+      const key = input.dedupeKey.trim();
+      if (key.length < 8 || key.length > 255 || !/^[A-Za-z0-9_.:-]+$/.test(key)) {
+        return { success: false, code: 'NOTIFICATION_DEDUPE_KEY_INVALID', error: 'dedupeKey must be 8-255 URL-safe characters' };
+      }
+      const existing = await this.storage.getDeliveryByDedupeKey(input.senderWallet + ':' + key);
+      if (existing) return { success: true, delivery: existing };
+      input = { ...input, dedupeKey: input.senderWallet + ':' + key };
+    }
+
     // Per-invoice email cap (Issue #31): Enforce max outbound emails per invoice to prevent spam relays
     const existingDeliveries = await this.storage.listDeliveries({ invoiceId: input.invoiceId });
     if (existingDeliveries.length >= this.maxEmailsPerInvoice) {
@@ -165,14 +177,25 @@ export class EmailQueueService {
     const isBreakerTripped = this.antiSpam.isCircuitBreakerTripped();
     const initialStatus: EmailDeliveryStatus = isBreakerTripped ? 'PAUSED' : 'PENDING';
 
-    const delivery = await this.storage.createDelivery(
+    let delivery: EmailDelivery;
+    try {
+      delivery = await this.storage.createDelivery(
       {
         ...input,
         recipientEmail: val.normalized || input.recipientEmail,
         maxAttempts: input.maxAttempts || this.retryConfig.defaultMaxAttempts,
       },
       initialStatus
-    );
+      );
+    } catch (error) {
+      // Concurrent duplicate enqueue can race the preflight lookup. Recover by
+      // reading the unique-key winner; propagate unrelated storage failures.
+      if (input.dedupeKey) {
+        const existing = await this.storage.getDeliveryByDedupeKey(input.dedupeKey);
+        if (existing) return { success: true, delivery: existing };
+      }
+      throw error;
+    }
 
     this.antiSpam.recordWalletSend(input.senderWallet);
 
