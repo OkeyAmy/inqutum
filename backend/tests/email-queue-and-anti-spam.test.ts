@@ -121,6 +121,22 @@ describe('Phase E: Email Queue, Retry Policy, and Anti-Spam Protection', () => {
   });
 
   describe('Issue #37: Email Delivery Queue, Retry Policy, and Visibility', () => {
+    it('suppresses duplicate enqueue keys and rejects malformed keys', async () => {
+      const input: EnqueueEmailInput = {
+        invoiceId: INVOICE_ID, dedupeKey: 'event_12345678', recipientEmail: 'dedupe@example.com',
+        senderWallet: WALLET_A, emailType: 'INVOICE_SENT', subject: 'One notification',
+      };
+      const first = await queue.enqueue(input);
+      const duplicate = await queue.enqueue({ ...input, recipientEmail: 'changed@example.com' });
+      assert.equal(first.success, true);
+      assert.equal(duplicate.success, true);
+      assert.equal(duplicate.delivery?.id, first.delivery?.id);
+      assert.equal((await storage.listDeliveries({ invoiceId: INVOICE_ID })).length, 1);
+      const invalid = await queue.enqueue({ ...input, dedupeKey: 'bad' });
+      assert.equal(invalid.success, false);
+      assert.equal(invalid.code, 'NOTIFICATION_DEDUPE_KEY_INVALID');
+    });
+
     it('successfully delivers email and records persistent audit fields', async () => {
       const input: EnqueueEmailInput = {
         invoiceId: INVOICE_ID,
