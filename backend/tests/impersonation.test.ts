@@ -237,3 +237,32 @@ describe('Scoped maintainer impersonation (Issue #76)', () => {
     });
   });
 });
+
+describe('security-event session revocation (#297)', () => {
+  let audit: MemoryAuditStore;
+  let clock: number;
+  let service: ImpersonationService;
+  beforeEach(() => {
+    audit = new MemoryAuditStore(500);
+    clock = 1_700_000_000_000;
+    service = new ImpersonationService({ now: () => clock, audit, randomId: (() => { let n = 0; return () => `revoke_${n++}`; })() });
+  });
+
+  it('revokes all sessions for a maintainer, denies authorization and is safe to retry', () => {
+    const session = service.startSession({ maintainerId: MAINTAINER, targetId: SELLER, reason: 'support ticket' });
+    const other = service.startSession({ maintainerId: 'maintainer-bob', targetId: SELLER, reason: 'support ticket' });
+    assert.deepEqual(service.revokeSessionsForMaintainer(MAINTAINER, 'credential compromise'), [session.id]);
+    assert.deepEqual(service.revokeSessionsForMaintainer(MAINTAINER, 'credential compromise'), []);
+    assert.equal(service.authorize({ maintainerId: MAINTAINER, action: 'invoice.read' }).code, 'SESSION_REVOKED');
+    assert.equal(service.authorize({ maintainerId: 'maintainer-bob', action: 'invoice.read' }).allowed, true);
+    assert.equal(audit.queryEvents({ action: 'IMPERSONATION_REVOKED', limit: 10 }).total, 1);
+    assert.equal(service.endSession(other.id, 'maintainer-bob'), true);
+  });
+
+  it('supports emergency revocation of every active session and validates reasons', () => {
+    service.startSession({ maintainerId: MAINTAINER, targetId: SELLER, reason: 'ticket' });
+    assert.throws(() => service.revokeAllSessions('  '), /reason is required/i);
+    assert.equal(service.revokeAllSessions('incident response').length, 1);
+    assert.equal(service.authorize({ maintainerId: MAINTAINER, action: 'invoice.read' }).code, 'SESSION_REVOKED');
+  });
+});
