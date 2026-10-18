@@ -236,6 +236,37 @@ export class CapabilityTokenService {
     return claims;
   }
 
+  /** Revoke one already-authenticated capability after a security event. */
+  revokeCapability(claims: CapabilityClaims): boolean {
+    if (!claims?.id || !Number.isSafeInteger(claims.exp) || claims.exp <= this.now().getTime()) return false;
+    this.pruneRevocations(this.now().getTime());
+    const existed = this.revokedIds.has(claims.id);
+    this.revokedIds.set(claims.id, claims.exp);
+    this.ledger.delete(claims.id);
+    return !existed;
+  }
+
+  /** Invalidate every capability issued to a subject at or before this cutoff. */
+  revokeSubject(subject: string): boolean {
+    const normalized = String(subject ?? '').trim();
+    if (!normalized || normalized.length > MAX_FIELD_LENGTH) {
+      throw new CapabilityError('CAPABILITY_REQUEST_INVALID', `subject is required (max ${MAX_FIELD_LENGTH} characters)`);
+    }
+    const cutoff = this.now().getTime();
+    const previous = this.revokedSubjects.get(normalized);
+    if (previous !== undefined && previous.cutoff >= cutoff) return false;
+    const maxTtl = Math.max(...Object.values(SENSITIVE_ACTIONS).map((spec) => spec.maxTtlMs));
+    this.revokedSubjects.set(normalized, { cutoff, expiresAt: cutoff + maxTtl + CLOCK_SKEW_MS });
+    return true;
+  }
+
+  private pruneRevocations(now: number): void {
+    for (const [id, exp] of this.revokedIds) if (exp <= now) this.revokedIds.delete(id);
+    for (const [subject, revocation] of this.revokedSubjects) {
+      if (revocation.expiresAt <= now) this.revokedSubjects.delete(subject);
+    }
+  }
+
   /**
    * Verify, reserve, run, then commit on success or release on failure.
    * The reservation is taken synchronously, so two concurrent calls with the
