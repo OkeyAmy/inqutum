@@ -19,6 +19,7 @@ export class MemoryEmailDeliveryStorage implements EmailDeliveryStorage {
     const delivery: EmailDelivery = {
       id: randomUUID(),
       invoiceId: input.invoiceId,
+      dedupeKey: input.dedupeKey,
       recipientEmail: input.recipientEmail,
       senderWallet: input.senderWallet,
       emailType: input.emailType,
@@ -35,6 +36,11 @@ export class MemoryEmailDeliveryStorage implements EmailDeliveryStorage {
 
     this.deliveries.set(delivery.id, delivery);
     return { ...delivery };
+  }
+
+  public async getDeliveryByDedupeKey(key: string): Promise<EmailDelivery | null> {
+    const found = Array.from(this.deliveries.values()).find((d) => d.dedupeKey === key);
+    return found ? { ...found } : null;
   }
 
   public async getDeliveryById(id: string): Promise<EmailDelivery | null> {
