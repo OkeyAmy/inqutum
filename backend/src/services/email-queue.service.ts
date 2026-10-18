@@ -193,6 +193,12 @@ export class EmailQueueService {
       },
       initialStatus
       );
+      if (input.dedupeKey) {
+        const samePayload = JSON.stringify(delivery.payload ?? {}) === JSON.stringify(input.payload ?? {});
+        if (delivery.invoiceId !== input.invoiceId || delivery.recipientEmail.toLowerCase() !== (val.normalized || input.recipientEmail).toLowerCase() || delivery.emailType !== input.emailType || delivery.subject !== input.subject || !samePayload) {
+          return { success: false, code: 'NOTIFICATION_DEDUPE_KEY_CONFLICT', error: 'dedupeKey was already used for a different notification' };
+        }
+      }
     } catch (error) {
       // Concurrent duplicate enqueue can race the preflight lookup. Recover by
       // reading the unique-key winner; propagate unrelated storage failures.
