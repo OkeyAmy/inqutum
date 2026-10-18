@@ -140,6 +140,24 @@ describe('Phase E: Email Queue, Retry Policy, and Anti-Spam Protection', () => {
       assert.equal(invalid.code, 'NOTIFICATION_DEDUPE_KEY_INVALID');
     });
 
+    it('does not charge duplicate keys against the wallet rate limit and canonicalizes payload key order', async () => {
+      const base: EnqueueEmailInput = {
+        invoiceId: INVOICE_ID, dedupeKey: 'event_rate_12345', recipientEmail: 'dedupe-rate@example.com',
+        senderWallet: WALLET_A, emailType: 'INVOICE_SENT', subject: 'Rate-safe duplicate',
+        payload: { text: 'hello', metadata: { first: 1, second: 2 } },
+      };
+      const first = await queue.enqueue(base);
+      const duplicate = await queue.enqueue({ ...base, payload: { metadata: { second: 2, first: 1 }, text: 'hello' } });
+      assert.equal(first.success, true);
+      assert.equal(duplicate.success, true);
+      assert.equal(duplicate.delivery?.id, first.delivery?.id);
+      assert.equal((await queue.enqueue({ ...base, dedupeKey: 'event_rate_22345', recipientEmail: 'other1@example.com' })).success, true);
+      assert.equal((await queue.enqueue({ ...base, dedupeKey: 'event_rate_32345', recipientEmail: 'other2@example.com' })).success, true);
+      const overLimit = await queue.enqueue({ ...base, dedupeKey: 'event_rate_42345', recipientEmail: 'other3@example.com' });
+      assert.equal(overLimit.success, false);
+      assert.equal(overLimit.code, 'EMAIL_RATE_LIMIT_EXCEEDED');
+    });
+
     it('successfully delivers email and records persistent audit fields', async () => {
       const input: EnqueueEmailInput = {
         invoiceId: INVOICE_ID,
