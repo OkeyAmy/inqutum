@@ -198,7 +198,13 @@ export class EmailQueueService {
       // reading the unique-key winner; propagate unrelated storage failures.
       if (input.dedupeKey) {
         const existing = await this.storage.getDeliveryByDedupeKey(input.dedupeKey);
-        if (existing) return { success: true, delivery: existing };
+        if (existing) {
+          const samePayload = JSON.stringify(existing.payload ?? {}) === JSON.stringify(input.payload ?? {});
+          if (existing.invoiceId !== input.invoiceId || existing.recipientEmail.toLowerCase() !== (val.normalized || input.recipientEmail).toLowerCase() || existing.emailType !== input.emailType || existing.subject !== input.subject || !samePayload) {
+            return { success: false, code: 'NOTIFICATION_DEDUPE_KEY_CONFLICT', error: 'dedupeKey was already used for a different notification' };
+          }
+          return { success: true, delivery: existing };
+        }
       }
       throw error;
     }
