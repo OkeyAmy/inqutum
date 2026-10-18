@@ -239,7 +239,7 @@ export class EmailQueueService {
       if (input.dedupeKey) {
         const existing = await this.storage.getDeliveryByDedupeKey(input.dedupeKey);
         if (existing) {
-          const samePayload = JSON.stringify(existing.payload ?? {}) === JSON.stringify(input.payload ?? {});
+          const samePayload = canonicalJson(existing.payload ?? {}) === canonicalJson(input.payload ?? {});
           if (existing.invoiceId !== input.invoiceId || existing.recipientEmail.toLowerCase() !== (val.normalized || input.recipientEmail).toLowerCase() || existing.emailType !== input.emailType || existing.subject !== input.subject || !samePayload) {
             return { success: false, code: 'NOTIFICATION_DEDUPE_KEY_CONFLICT', error: 'dedupeKey was already used for a different notification' };
           }
