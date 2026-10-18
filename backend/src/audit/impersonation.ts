@@ -206,8 +206,8 @@ export class ImpersonationService {
     const nowMs = this.now();
     for (const session of this.sessions.values()) {
       if (session.maintainerId !== maintainerId) continue;
-      if (session.endedAt) return null;
-      if (this.expireIfDue(session, nowMs)) return null;
+      if (session.endedAt) continue;
+      if (this.expireIfDue(session, nowMs)) continue;
       return session;
     }
     return null;
