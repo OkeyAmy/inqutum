@@ -108,11 +108,15 @@ export class PostgresEmailDeliveryStorage implements EmailDeliveryStorage {
       params.push(filter.status);
     }
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    const limit = filter.limit ? `LIMIT ${filter.limit}` : '';
-    const offset = filter.offset ? `OFFSET ${filter.offset}` : '';
-
-    const text = `SELECT * FROM email_deliveries ${whereClause} ORDER BY created_at DESC ${limit} ${offset};`;
+    const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+    const limit = filter.limit;
+    const offset = filter.offset;
+    if (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 0 || limit > 1000)) throw new RangeError('limit must be an integer between 0 and 1000');
+    if (offset !== undefined && (!Number.isSafeInteger(offset) || offset < 0)) throw new RangeError('offset must be a non-negative safe integer');
+    const pagination: string[] = [];
+    if (limit !== undefined) { params.push(limit); pagination.push('LIMIT $' + idx++); }
+    if (offset !== undefined) { params.push(offset); pagination.push('OFFSET $' + idx++); }
+    const text = 'SELECT * FROM email_deliveries ' + whereClause + ' ORDER BY created_at DESC ' + pagination.join(' ') + ';';
     const res = await this.db.query(text, params);
     return res.rows.map(mapRowToDelivery);
   }
