@@ -13,9 +13,9 @@ describe('webhook duplicate suppression (#294)', () => {
     assert.equal(handled, 1);
   });
 
-  it('validates the normalized event ID length', async () => {
+  it('rejects normalized event IDs longer than 255 characters', async () => {
     const result = await processWebhook(new MemoryIdempotencyStore(), {
-      provider: 'ExamplePay', eventId: ' '.repeat(250) + 'evt_12345678', rawBody: '{}',
+      provider: 'ExamplePay', eventId: 'evt_' + 'x'.repeat(256), rawBody: '{}',
       verifySignature: () => true, handle: () => 'ok',
     });
     assert.deepEqual(result, { accepted: false, status: 400, code: 'WEBHOOK_EVENT_ID_INVALID' });
