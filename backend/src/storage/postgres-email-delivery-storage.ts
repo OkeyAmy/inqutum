@@ -39,43 +39,22 @@ export class PostgresEmailDeliveryStorage implements EmailDeliveryStorage {
     this.db = db;
   }
 
-  public async createDelivery(
-    input: EnqueueEmailInput,
-    initialStatus: EmailDeliveryStatus = 'PENDING'
-  ): Promise<EmailDelivery> {
-    const text = `
-      INSERT INTO email_deliveries (
-        invoice_id, dedupe_key, recipient_email, sender_wallet, email_type, subject,
-        status, attempts, max_attempts, next_attempt_at, is_retryable, payload
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8, NOW(), TRUE, $9)
-      ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING
-      RETURNING *;
-    `;
-    const params = [
-      input.invoiceId,
-      input.dedupeKey ?? null,
-      input.recipientEmail,
-      input.senderWallet,
-      input.emailType,
-      input.subject,
-      initialStatus,
-      input.maxAttempts ?? 5,
-      JSON.stringify(input.payload || {}),
-    ];
-
-    const res = await this.db.query(text, params);
-    if (res.rows[0]) return mapRowToDelivery(res.rows[0]);
-    if (input.dedupeKey) {
-      const existing = await this.getDeliveryByDedupeKey(input.dedupeKey);
-      if (existing) return existing;
-    }
-    throw new Error('Email delivery insert returned no row and no matching dedupe key');
+  public async createDelivery(input: EnqueueEmailInput, initialStatus: EmailDeliveryStatus = 'PENDING'): Promise<EmailDelivery> {
+    return (await this.createDeliveryWithDedupe(input, initialStatus)).delivery;
   }
 
   public async createDeliveryWithDedupe(input: EnqueueEmailInput, initialStatus: EmailDeliveryStatus = 'PENDING'): Promise<{ delivery: EmailDelivery; created: boolean }> {
-    const before = input.dedupeKey ? await this.getDeliveryByDedupeKey(input.dedupeKey) : null;
-    const delivery = await this.createDelivery(input, initialStatus);
-    return { delivery, created: !before && delivery.createdAt.getTime() >= Date.now() - 5000 && delivery.dedupeKey === input.dedupeKey && delivery.status === initialStatus && delivery.attempts === 0 };
+    const text = 'INSERT INTO email_deliveries (invoice_id, dedupe_key, recipient_email, sender_wallet, email_type, subject, status, attempts, max_attempts, next_attempt_at, is_retryable, payload) ' +
+      'VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8, NOW(), TRUE, $9) ' +
+      'ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING RETURNING *;';
+    const params = [input.invoiceId, input.dedupeKey ?? null, input.recipientEmail, input.senderWallet, input.emailType, input.subject, initialStatus, input.maxAttempts ?? 5, JSON.stringify(input.payload || {})];
+    const res = await this.db.query(text, params);
+    if (res.rows[0]) return { delivery: mapRowToDelivery(res.rows[0]), created: true };
+    if (input.dedupeKey) {
+      const existing = await this.getDeliveryByDedupeKey(input.dedupeKey);
+      if (existing) return { delivery: existing, created: false };
+    }
+    throw new Error('Email delivery insert returned no row and no matching dedupe key');
   }
 
   public async getDeliveryByDedupeKey(key: string): Promise<EmailDelivery | null> {
