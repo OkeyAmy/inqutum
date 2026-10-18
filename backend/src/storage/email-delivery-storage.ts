@@ -8,6 +8,7 @@ import type {
 export interface EmailDeliveryStorage {
   readonly mode: string;
   createDelivery(input: EnqueueEmailInput, initialStatus?: EmailDeliveryStatus): Promise<EmailDelivery>;
+  getDeliveryByDedupeKey(key: string): Promise<EmailDelivery | null>;
   getDeliveryById(id: string): Promise<EmailDelivery | null>;
   listDeliveries(filter?: EmailDeliveryFilter): Promise<EmailDelivery[]>;
   getPendingDeliveries(maxCount?: number, now?: Date): Promise<EmailDelivery[]>;
