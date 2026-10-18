@@ -254,6 +254,8 @@ describe('security-event session revocation (#297)', () => {
     assert.deepEqual(service.revokeSessionsForMaintainer(MAINTAINER, 'credential compromise'), [session.id]);
     assert.deepEqual(service.revokeSessionsForMaintainer(MAINTAINER, 'credential compromise'), []);
     assert.equal(service.authorize({ maintainerId: MAINTAINER, action: 'invoice.read' }).code, 'SESSION_REVOKED');
+    const renewed = service.startSession({ maintainerId: MAINTAINER, targetId: SELLER, reason: 'fresh authorization after incident' });
+    assert.equal(service.authorize({ maintainerId: MAINTAINER, action: 'invoice.read' }).sessionId, renewed.id);
     assert.equal(service.authorize({ maintainerId: 'maintainer-bob', action: 'invoice.read' }).allowed, true);
     assert.equal(audit.queryEvents({ action: 'IMPERSONATION_REVOKED', limit: 10 }).total, 1);
     assert.equal(service.endSession(other.id, 'maintainer-bob'), true);
