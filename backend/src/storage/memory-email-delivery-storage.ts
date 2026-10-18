@@ -15,6 +15,10 @@ export class MemoryEmailDeliveryStorage implements EmailDeliveryStorage {
     input: EnqueueEmailInput,
     initialStatus: EmailDeliveryStatus = 'PENDING'
   ): Promise<EmailDelivery> {
+    if (input.dedupeKey) {
+      const existing = Array.from(this.deliveries.values()).find((d) => d.dedupeKey === input.dedupeKey);
+      if (existing) return { ...existing };
+    }
     const now = new Date();
     const delivery: EmailDelivery = {
       id: randomUUID(),
